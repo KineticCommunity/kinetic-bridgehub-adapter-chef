@@ -14,6 +14,8 @@ import com.kineticdata.commons.v1.config.ConfigurablePropertyMap;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -94,14 +96,30 @@ public class ChefAdapter implements BridgeAdapter {
     /** Defines the collection of property names for the adapter */
     public static class Properties {
         public static final String PROPERTY_USERNAME = "Username";
+        public static final String PROPERTY_PEM_INPUT_TYPE = "Pem Input Type";
+        public static final String PROPERTY_PEM_CONTENT = "Pem Content";
         public static final String PROPERTY_PEM_LOCATION = "Pem Location";
         public static final String PROPERTY_API_ENDPOINT = "API Endpoint";
     }
     
+    public static class PemTypes {
+        public static final String FILE_SYSTEM = "On File System";
+        public static final String FILE_CONTENT = "File Content";
+    }
+    
     private final ConfigurablePropertyMap properties = new ConfigurablePropertyMap(
         new ConfigurableProperty(Properties.PROPERTY_USERNAME).setIsRequired(true),
-        new ConfigurableProperty(Properties.PROPERTY_PEM_LOCATION).setIsRequired(true),
-        new ConfigurableProperty(Properties.PROPERTY_API_ENDPOINT).setIsRequired(true).setValue("https://api.opscode.com/organizations/YOUR_ORGANIZATION")
+        new ConfigurableProperty(Properties.PROPERTY_PEM_INPUT_TYPE).setIsRequired(true)
+            .addPossibleValues(PemTypes.FILE_SYSTEM,PemTypes.FILE_CONTENT).setValue(PemTypes.FILE_SYSTEM),
+        new ConfigurableProperty(Properties.PROPERTY_PEM_LOCATION).setIsRequired(true)
+            .setDependency(Properties.PROPERTY_PEM_INPUT_TYPE, PemTypes.FILE_SYSTEM)
+            .setDescription("A file system path pointing to a copy of the configured username's .pem file."),
+        new ConfigurableProperty(Properties.PROPERTY_PEM_CONTENT).setIsRequired(true).setIsSensitive(true)
+            .setDependency(Properties.PROPERTY_PEM_INPUT_TYPE,PemTypes.FILE_CONTENT)
+            .setDescription("The full contents of the configured username's .pem file."),
+        new ConfigurableProperty(Properties.PROPERTY_API_ENDPOINT).setIsRequired(true)
+            .setValue("https://api.opscode.com/organizations/YOUR_ORGANIZATION")
+            .setDescription("Can be found in the URL (the whole URL up until the organization name) when viewing Chef in the browser.")
     );
     
     private String username;
@@ -123,8 +141,19 @@ public class ChefAdapter implements BridgeAdapter {
     @Override
     public void initialize() throws BridgeError {
         this.username = properties.getValue(Properties.PROPERTY_USERNAME);
+        String pemContent = properties.getValue(Properties.PROPERTY_PEM_CONTENT);
+        pemContent = pemContent.replace("-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----\r\n");
+        pemContent = pemContent.replace("-----END RSA PRIVATE KEY-----", "\r\n-----END RSA PRIVATE KEY-----");
         try {
-            PEMParser pemParser = new PEMParser(new FileReader(properties.getValue(Properties.PROPERTY_PEM_LOCATION)));
+            Reader reader;
+            if (properties.getValue(Properties.PROPERTY_PEM_INPUT_TYPE).equals(PemTypes.FILE_SYSTEM)) {
+                reader = new FileReader(properties.getValue(Properties.PROPERTY_PEM_LOCATION));
+            } else if (properties.getValue(Properties.PROPERTY_PEM_INPUT_TYPE).equals(PemTypes.FILE_CONTENT)) {
+                reader = new StringReader(pemContent);
+            } else {
+                throw new BridgeError("Invalid Pem Type Selected: "+properties.getValue(Properties.PROPERTY_PEM_INPUT_TYPE));
+            }
+            PEMParser pemParser = new PEMParser(reader);
             Object object = pemParser.readObject();
             
             PKCS8EncodedKeySpec keySpec;
@@ -141,9 +170,9 @@ public class ChefAdapter implements BridgeAdapter {
             KeyFactory factory = KeyFactory.getInstance("RSA");
             this.privateKey = factory.generatePrivate(keySpec);
         } catch (FileNotFoundException e) {
-            throw new BridgeError("Couldn't find the Local PEM file at '"+properties.getValue(Properties.PROPERTY_PEM_LOCATION)+"'.",e);
+            throw new BridgeError("Error loading PEM file.",e);
         } catch (IOException e) {
-            throw new BridgeError("Couldn't read the Local PEM file at '"+properties.getValue(Properties.PROPERTY_PEM_LOCATION)+"'.",e);
+            throw new BridgeError("Error loading PEM file.",e);
         } catch (NoSuchAlgorithmException e) {
             throw new BridgeError(e);
         } catch (InvalidKeySpecException e) {
