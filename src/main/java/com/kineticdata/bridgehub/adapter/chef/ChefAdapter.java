@@ -55,7 +55,6 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.util.EntityUtils;
@@ -72,13 +71,13 @@ public class ChefAdapter implements BridgeAdapter {
     /*----------------------------------------------------------------------------------------------
      * PROPERTIES
      *--------------------------------------------------------------------------------------------*/
-    
+
     /** Defines the adapter display name */
     public static final String NAME = "Chef Bridge";
-    
+
     /** Defines the logger */
     protected static final org.slf4j.Logger logger = LoggerFactory.getLogger(ChefAdapter.class);
-    
+
     /** Adapter version constant. */
     public static String VERSION;
     /** Load the properties version from the version.properties file. */
@@ -92,7 +91,7 @@ public class ChefAdapter implements BridgeAdapter {
             VERSION = "Unknown";
         }
     }
-    
+
     /** Defines the collection of property names for the adapter */
     public static class Properties {
         public static final String PROPERTY_USERNAME = "Username";
@@ -101,12 +100,12 @@ public class ChefAdapter implements BridgeAdapter {
         public static final String PROPERTY_PEM_LOCATION = "Pem Location";
         public static final String PROPERTY_API_ENDPOINT = "API Endpoint";
     }
-    
+
     public static class PemTypes {
         public static final String FILE_SYSTEM = "On File System";
         public static final String FILE_CONTENT = "File Content";
     }
-    
+
     private final ConfigurablePropertyMap properties = new ConfigurablePropertyMap(
         new ConfigurableProperty(Properties.PROPERTY_USERNAME).setIsRequired(true),
         new ConfigurableProperty(Properties.PROPERTY_PEM_INPUT_TYPE).setIsRequired(true)
@@ -121,7 +120,7 @@ public class ChefAdapter implements BridgeAdapter {
             .setValue("https://api.opscode.com/organizations/YOUR_ORGANIZATION")
             .setDescription("Can be found in the URL (the whole URL up until the organization name) when viewing Chef in the browser.")
     );
-    
+
     private String username;
     private PrivateKey privateKey;
     private String apiEndpoint;
@@ -133,7 +132,7 @@ public class ChefAdapter implements BridgeAdapter {
     public static final List<String> VALID_STRUCTURES = Arrays.asList(new String[] {
         "Cookbooks","Nodes","Recipes"
     });
-    
+
     /*---------------------------------------------------------------------------------------------
      * SETUP METHODS
      *-------------------------------------------------------------------------------------------*/
@@ -155,18 +154,18 @@ public class ChefAdapter implements BridgeAdapter {
             }
             PEMParser pemParser = new PEMParser(reader);
             Object object = pemParser.readObject();
-            
+
             PKCS8EncodedKeySpec keySpec;
             if (object instanceof PEMKeyPair) {
                 PrivateKeyInfo info = ((PEMKeyPair)object).getPrivateKeyInfo();
-                keySpec = new PKCS8EncodedKeySpec(info.getEncoded());                
+                keySpec = new PKCS8EncodedKeySpec(info.getEncoded());
             } else if (object instanceof PrivateKeyInfo) {
                 PrivateKeyInfo info = (PrivateKeyInfo)object;
                 keySpec = new PKCS8EncodedKeySpec(info.getEncoded());
             } else {
                 throw new BridgeError("PEM file type '"+object.getClass().toString()+"' not recognized");
             }
-            
+
             KeyFactory factory = KeyFactory.getInstance("RSA");
             this.privateKey = factory.generatePrivate(keySpec);
         } catch (FileNotFoundException e) {
@@ -180,27 +179,27 @@ public class ChefAdapter implements BridgeAdapter {
         }
         this.apiEndpoint = properties.getValue(Properties.PROPERTY_API_ENDPOINT).replaceFirst("/$","");
     }
-    
+
     @Override
     public String getName() {
         return NAME;
     }
-    
+
     @Override
     public String getVersion() {
         return VERSION;
     }
-    
+
     @Override
     public void setProperties(Map<String,String> parameters) {
         properties.setValues(parameters);
     }
-    
+
     @Override
     public ConfigurablePropertyMap getProperties() {
         return properties;
     }
-    
+
     /*---------------------------------------------------------------------------------------------
      * IMPLEMENTATION METHODS
      *-------------------------------------------------------------------------------------------*/
@@ -209,12 +208,12 @@ public class ChefAdapter implements BridgeAdapter {
     public Count count(BridgeRequest request) throws BridgeError {
         RecordList recordList = search(request);
         List<Record> records = recordList.getRecords();
-        
+
         return new Count(records.size());
     }
 
     @Override
-    public Record retrieve(BridgeRequest request) throws BridgeError {        
+    public Record retrieve(BridgeRequest request) throws BridgeError {
         RecordList recordList = search(request);
         List<Record> records = recordList.getRecords();
 
@@ -226,7 +225,7 @@ public class ChefAdapter implements BridgeAdapter {
         } else {
             record = new Record(records.get(0).getRecord(),request.getFields());
         }
-        
+
         // Returning the response
         return record;
     }
@@ -326,7 +325,7 @@ public class ChefAdapter implements BridgeAdapter {
                     Future<Map<String,Object>> future = threadPool.submit(callable);
                     retrievedThreadsMap.put(record,future);
                 }
-                
+
                 for (Map.Entry<Record,Future<Map<String,Object>>> entry : retrievedThreadsMap.entrySet()) {
                     try {
                         Map<String,Object> cookbookDetails = entry.getValue().get();
@@ -385,7 +384,7 @@ public class ChefAdapter implements BridgeAdapter {
                 // Initializing threading variables
                 ExecutorService threadPool = Executors.newFixedThreadPool(5);
                 Map<Record,Future<Map<String,Object>>> retrievedThreadsMap = new HashMap<Record,Future<Map<String,Object>>>();
-                
+
                 for (Record record : records) {
                     String name = (String)record.getValue("name");
                     // Create threaded Future calls to be retrieve the JSONObject for each node
@@ -394,7 +393,7 @@ public class ChefAdapter implements BridgeAdapter {
                     Future<Map<String,Object>> future = threadPool.submit(callable);
                     retrievedThreadsMap.put(record,future);
                 }
-                
+
                 for (Map.Entry<Record,Future<Map<String,Object>>> entry : retrievedThreadsMap.entrySet()) {
                     try {
                         Map<String,Object> nodeDetails = entry.getValue().get();
@@ -455,7 +454,7 @@ public class ChefAdapter implements BridgeAdapter {
         if (fields == null || fields.isEmpty()) {
             fields = records.isEmpty() ? new ArrayList<String>() : records.get(0).getFieldNames();
         }
-        
+
         // Filter, sort, and streamline the data set
         records = BridgeUtils.getNestedFields(fields,records);
         records = filterRecords(records,query);
@@ -482,11 +481,11 @@ public class ChefAdapter implements BridgeAdapter {
         metadata.put("offset", "0");
         metadata.put("size", String.valueOf(records.size()));
         metadata.put("count", metadata.get("size"));
-        
+
         // Returning the response
         return new RecordList(fields, records, metadata);
     }
-    
+
     /*----------------------------------------------------------------------------------------------
      * PRIVATE HELPER METHODS
      *--------------------------------------------------------------------------------------------*/
@@ -534,27 +533,27 @@ public class ChefAdapter implements BridgeAdapter {
 
         return cookbookNames;
     }
-    
+
     /**
      * This method builds and sends a request to the Chef REST API given the inputted data and returns an
      * HttpResponse object after the call has returned. This method mainly helps with creating a proper
      * signature for the request (documentation on the Chef REST API signing process can be found here -
      * https://docs.chef.io/api_chef_server.html), but it alos throws and logs an error if a 401 is retrieved on the
      * attempted call.
-     * 
+     *
      * @param url
      * @param headers
      * @return
-     * @throws BridgeError 
+     * @throws BridgeError
      */
     private HttpResponse request(String method, String url, String payload) throws BridgeError {
         Base64 base64 = new Base64(60,"\n".getBytes());
-        
+
         // Build a datetime timestamp of the current time (in UTC).
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
         df.setTimeZone(TimeZone.getTimeZone("UTC"));
         String datetime = df.format(new Date());
-        
+
         // Create a URI from the request URL so that we can pull the host/path/port from it
         URI uri;
         try {
@@ -562,17 +561,17 @@ public class ChefAdapter implements BridgeAdapter {
         } catch (URISyntaxException e) {
             throw new BridgeError("There was an error parsing the inputted url '"+url+"' into a java URI.",e);
         }
-        
+
         /* BUILD CANONCIAL REQUEST (uri, query, headers, signed headers, hashed payload)*/
-        
+
         // Canonical URI (the part of the URL between the host and the ?. If blank, the uri is just /) and
         // remove any duplicate and trailing / characters
         String canonicalUri = uri.getPath().isEmpty() ? "/" : uri.getPath();
         canonicalUri = canonicalUri.replaceAll("/{2,}","/").replaceFirst("/$","");
-        
+
         // Hashed payload (a SHA1 hash that is then Base64 encoded)
         String hashedPayload = new String(base64.encode(DigestUtils.sha1(payload))).trim();
-        
+
         // Canonical Request (method, hashed uri path, hashed payload, utc timestamp, user id) signed
         // with the private key
         StringBuilder requestBuilder = new StringBuilder();
@@ -581,7 +580,7 @@ public class ChefAdapter implements BridgeAdapter {
         requestBuilder.append("X-Ops-Content-Hash:").append(hashedPayload).append("\n");
         requestBuilder.append("X-Ops-Timestamp:").append(datetime).append("\n");
         requestBuilder.append("X-Ops-UserId:").append(this.username);
-        
+
         logger.debug("Unsigned Canonical Request: \n"+requestBuilder.toString());
         // Sign the resulting string with the private key
         String hashedRequest;
@@ -593,9 +592,9 @@ public class ChefAdapter implements BridgeAdapter {
         } catch (Exception e) {
             throw new BridgeError(e);
         }
-        
+
         /* CREATE THE HTTP REQUEST */
-        HttpClient client = new DefaultHttpClient();
+        HttpClient client = HttpClients.createDefault();
         HttpRequestBase request;
         try {
             if (method.toLowerCase().equals("get")) {
@@ -609,7 +608,7 @@ public class ChefAdapter implements BridgeAdapter {
         } catch (UnsupportedEncodingException e) {
             throw new BridgeError(e);
         }
-        
+
         /* ADD HEADERS TO HTTP REQUEST */
         request.setHeader("Accept","application/json");
         request.setHeader("Content-Type","application/json");
@@ -621,25 +620,25 @@ public class ChefAdapter implements BridgeAdapter {
         request.setHeader("X-Ops-Timestamp",datetime);
         request.setHeader("X-Ops-UserId",this.username);
         request.setHeader("X-Ops-Content-Hash",hashedPayload);
-        
+
         String[] authorizationChunks = hashedRequest.split("\\n");
         for (int i=0;i<authorizationChunks.length;i++) {
             request.setHeader("X-Ops-Authorization-"+String.valueOf(i+1),authorizationChunks[i].trim());
         }
-        
+
         HttpResponse response;
         try {
             response = client.execute(request);
-            
+
             if (response.getStatusLine().getStatusCode() == 401) { // || response.getStatusLine().getStatusCode() == 403) {
                 logger.error(EntityUtils.toString(response.getEntity()));
                 throw new BridgeError("User not authorized to access this resource. Check the logs for more details.");
             }
         } catch (IOException e) { throw new BridgeError(e); }
-        
+
         return response;
     }
-    
+
     private Pattern getPatternFromValue(String value) {
         // Escape regex characters from value
         String[] parts = value.split("(?<!\\\\)%");
@@ -654,7 +653,7 @@ public class ChefAdapter implements BridgeAdapter {
     protected final List<Record> filterRecords(List<Record> records, String query) throws BridgeError {
         if (query == null || query.isEmpty()) return records;
         String[] queryParts = query.split("&");
-        
+
         Map<String[],Object[]> queryMatchers = new HashMap<String[],Object[]>();
         // Iterate through the query parts and create all the possible matchers to check against
         // the user results
@@ -662,7 +661,7 @@ public class ChefAdapter implements BridgeAdapter {
             String[] split = part.split("=");
             String field = split[0].trim();
             String value = split.length > 1 ? split[1].trim() : "";
-            
+
             Object[] matchers;
             // Find the field and appropriate values for the query matcher
             if (value.equals("true") || value.equals("false")) {
@@ -676,10 +675,10 @@ public class ChefAdapter implements BridgeAdapter {
             }
             queryMatchers.put(new String[] { field }, matchers);
         }
-        
+
         // Start with a full list of records and then delete from the list when they don't match
         // a qualification. Will be left with a list of values that match all qualifications.
-        List<Record> matchedRecords = records;        
+        List<Record> matchedRecords = records;
         for (Map.Entry<String[],Object[]> entry : queryMatchers.entrySet()) {
             List<Record> matchedRecordsEntry = new ArrayList<Record>();
             for (String field : entry.getKey()) {
@@ -700,7 +699,7 @@ public class ChefAdapter implements BridgeAdapter {
                                     value.getClass() == Pattern.class && ((Pattern)value).matcher(fieldValue.toString()).matches() || // fieldValue != null && Pattern matches
                                     value.equals(fieldValue) // fieldValue != null && values equal
                                 )
-                            ) { 
+                            ) {
                                 matchedRecordsEntry.add(record);
                                 break;
                             }
@@ -710,7 +709,7 @@ public class ChefAdapter implements BridgeAdapter {
             }
             matchedRecords = matchedRecordsEntry;
         }
-        
+
         return matchedRecords;
     }
 
@@ -753,7 +752,7 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
     String payload;
     String username;
     PrivateKey privateKey;
-    
+
     protected ChefApiRequestCallable(String method, String url, String payload, String username, PrivateKey privateKey) {
         this.method = method;
         this.url = url;
@@ -761,18 +760,18 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         this.username = username;
         this.privateKey = privateKey;
     }
-    
+
     @Override
     public Map<String,Object> call() throws BridgeError {
         // Copying code from the private request() method from the main class with the only change
         // being to use a threading aware HttpClient
         Base64 base64 = new Base64(60,"\n".getBytes());
-        
+
         // Build a datetime timestamp of the current time (in UTC).
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
         df.setTimeZone(TimeZone.getTimeZone("UTC"));
         String datetime = df.format(new Date());
-        
+
         // Create a URI from the request URL so that we can pull the host/path/port from it
         URI uri;
         try {
@@ -780,17 +779,17 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         } catch (URISyntaxException e) {
             throw new BridgeError("There was an error parsing the inputted url '"+url+"' into a java URI.",e);
         }
-        
+
         /* BUILD CANONCIAL REQUEST (uri, query, headers, signed headers, hashed payload)*/
-        
+
         // Canonical URI (the part of the URL between the host and the ?. If blank, the uri is just /) and
         // remove any duplicate and trailing / characters
         String canonicalUri = uri.getPath().isEmpty() ? "/" : uri.getPath();
         canonicalUri = canonicalUri.replaceAll("/{2,}","/").replaceFirst("/$","");
-        
+
         // Hashed payload (a SHA1 hash that is then Base64 encoded)
         String hashedPayload = new String(base64.encode(DigestUtils.sha1(payload))).trim();
-        
+
         // Canonical Request (method, hashed uri path, hashed payload, utc timestamp, user id) signed
         // with the private key
         StringBuilder requestBuilder = new StringBuilder();
@@ -799,7 +798,7 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         requestBuilder.append("X-Ops-Content-Hash:").append(hashedPayload).append("\n");
         requestBuilder.append("X-Ops-Timestamp:").append(datetime).append("\n");
         requestBuilder.append("X-Ops-UserId:").append(this.username);
-        
+
         logger.debug("Unsigned Canonical Request: \n"+requestBuilder.toString());
         // Sign the resulting string with the private key
         String hashedRequest;
@@ -811,7 +810,7 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         } catch (Exception e) {
             throw new BridgeError(e);
         }
-        
+
         /* CREATE THE HTTP REQUEST */
         HttpClient client = HttpClients.custom().setConnectionManager(ChefAdapter.poolingConnManager).build();
         HttpRequestBase request;
@@ -827,7 +826,7 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         } catch (UnsupportedEncodingException e) {
             throw new BridgeError(e);
         }
-        
+
         /* ADD HEADERS TO HTTP REQUEST */
         request.setHeader("Accept","application/json");
         request.setHeader("Content-Type","application/json");
@@ -839,29 +838,29 @@ class ChefApiRequestCallable implements Callable<Map<String,Object>> {
         request.setHeader("X-Ops-Timestamp",datetime);
         request.setHeader("X-Ops-UserId",this.username);
         request.setHeader("X-Ops-Content-Hash",hashedPayload);
-        
+
         String[] authorizationChunks = hashedRequest.split("\\n");
         for (int i=0;i<authorizationChunks.length;i++) {
             request.setHeader("X-Ops-Authorization-"+String.valueOf(i+1),authorizationChunks[i].trim());
         }
-        
+
         HttpResponse response;
         try {
             response = client.execute(request);
-            
+
             if (response.getStatusLine().getStatusCode() == 401) { // || response.getStatusLine().getStatusCode() == 403) {
                 logger.error(EntityUtils.toString(response.getEntity()));
                 throw new BridgeError("User not authorized to access this resource. Check the logs for more details.");
             }
         } catch (IOException e) { throw new BridgeError(e); }
-        
+
         String output = "";
         try {
             output = EntityUtils.toString(response.getEntity());
         } catch (IOException e) {
             throw new BridgeError("Error retrieving the entity from the HttpResponse object",e);
         }
-        
+
         Map<String,Object> map = new Gson().fromJson(output, Map.class);
         return map;
     }
